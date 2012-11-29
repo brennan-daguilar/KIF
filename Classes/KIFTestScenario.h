@@ -117,6 +117,12 @@
 - (void)addStep:(KIFTestStep *)step;
 
 /*!
+ @method addSteps:
+ @abstract Add steps with a combination of individual steps or arrays of steps
+ */
+- (void)addSteps:(NSArray*)inSteps;
+
+/*!
  @method addStepsFromArray:
  @abstract Add multiple steps to the scenario from an array.
  */

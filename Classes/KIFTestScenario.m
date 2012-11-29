@@ -122,6 +122,15 @@ static NSArray *defaultStepsToTearDown = nil;
     [self _initializeStepsIfNeeded];
     [steps insertObject:step atIndex:(steps.count - self.stepsToTearDown.count)];
 }
+- (void)addSteps:(NSArray*)inSteps {
+    for (id item in inSteps) {
+        if ([item isKindOfClass:[NSArray class]]) {
+            [self addSteps:item];
+        } else if ([item isKindOfClass:[KIFTestStep class]]) {
+            [self addStep:item];
+        }
+    }
+}
 
 - (void)addStepsFromArray:(NSArray *)inSteps;
 {
