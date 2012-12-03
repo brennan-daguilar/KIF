@@ -162,13 +162,15 @@ typedef struct __GSEvent * GSEventRef;
             continue;
         }
         
-        for (NSInteger accessibilityElementIndex = 0; accessibilityElementIndex < accessibilityElementCount; accessibilityElementIndex++) {
-            UIAccessibilityElement *subelement = [element accessibilityElementAtIndex:accessibilityElementIndex];
-            
-            [elementStack addObject:subelement];
+        // Blacklist UIPickerTableView because it has 100000 accessibility elements and we don't care about any of them.
+        if (![element isKindOfClass:NSClassFromString(@"UIPickerTableView")]) {
+            for (NSInteger accessibilityElementIndex = 0; accessibilityElementIndex < accessibilityElementCount; accessibilityElementIndex++) {
+                UIAccessibilityElement *subelement = [element accessibilityElementAtIndex:accessibilityElementIndex];
+                [elementStack addObject:subelement];
+            }
         }
     }
-        
+    
     return matchingButOccludedElement;
 }
 
