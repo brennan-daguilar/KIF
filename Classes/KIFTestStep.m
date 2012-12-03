@@ -372,7 +372,12 @@ typedef CGPoint KIFDisplacement;
     return [self stepToEnterText:text intoViewWithAccessibilityLabel:label traits:UIAccessibilityTraitNone expectedResult:nil];
 }
 
-+ (id)stepToEnterText:(NSString *)text intoViewWithAccessibilityLabel:(NSString *)label traits:(UIAccessibilityTraits)traits expectedResult:(NSString *)expectedResult;
++ (id)stepToEnterText:(NSString *)text intoViewWithAccessibilityLabel:(NSString *)label traits:(UIAccessibilityTraits)traits expectedResult:(NSString *)expectedResult  {
+    return [self stepToEnterText:text intoViewWithAccessibilityLabel:label traits:traits expectedResult:expectedResult allowCustomKeyboard:YES];
+}
+
+
++ (id)stepToEnterText:(NSString *)text intoViewWithAccessibilityLabel:(NSString *)label traits:(UIAccessibilityTraits)traits expectedResult:(NSString *)expectedResult allowCustomKeyboard:(BOOL)allowCustomKeyboard;
 {
     NSString *description = [NSString stringWithFormat:@"Type the text \"%@\" into the view with accessibility label \"%@\"", text, label];
     return [self stepWithDescription:description executionBlock:^(KIFTestStep *step, NSError **error) {
@@ -400,11 +405,19 @@ typedef CGPoint KIFDisplacement;
         for (NSUInteger characterIndex = 0; characterIndex < [text length]; characterIndex++) {
             NSString *characterString = [text substringWithRange:NSMakeRange(characterIndex, 1)];
             
-            if (![self _enterCharacter:characterString]) {
+            if (![self _enterCharacter:characterString history:[NSMutableDictionary dictionary] allowCustomKeyboard:allowCustomKeyboard]) {
                 // Attempt to cheat if we couldn't find the character
                 if ([view isKindOfClass:[UITextField class]] || [view isKindOfClass:[UITextView class]]) {
                     NSLog(@"KIF: Unable to find keyboard key for %@. Inserting manually.", characterString);
-                    [(UITextField *)view setText:[[(UITextField *)view text] stringByAppendingString:characterString]];
+                    UITextField *textField = (UITextField*)view;
+                    id <UITextFieldDelegate> delegate = textField.delegate;
+                    if (delegate) {
+                        if ([delegate textField:textField shouldChangeCharactersInRange:NSMakeRange(textField.text.length, 0) replacementString:characterString]) {
+                            [textField insertText:characterString];
+                        }
+                    } else {
+                        [(UITextField*) view insertText:characterString];
+                    }
                 } else {
                     KIFTestCondition(NO, error, @"Failed to find key for character \"%@\"", characterString);
                 }
@@ -797,6 +810,10 @@ typedef CGPoint KIFDisplacement;
 
 + (BOOL)_enterCharacter:(NSString *)characterString history:(NSMutableDictionary *)history;
 {
+    return [self _enterCharacter:characterString history:history allowCustomKeyboard:YES];
+}
+
++ (BOOL)_enterCharacter:(NSString *)characterString history:(NSMutableDictionary *)history allowCustomKeyboard:(BOOL)allowCustom; {
     const NSTimeInterval keystrokeDelay = 0.05f;
     
     // Each key on the keyboard does not have its own view, so we have to ask for the list of keys,
@@ -809,7 +826,7 @@ typedef CGPoint KIFDisplacement;
     UIView *keyboardView = [[keyboardWindow subviewsWithClassNamePrefix:@"UIKBKeyplaneView"] lastObject];
     
     // If we didn't find the standard keyboard view, then we may have a custom keyboard
-    if (!keyboardView) {
+    if (!keyboardView && allowCustom) {
         return [self _enterCustomKeyboardCharacter:characterString];
     }
     id /*UIKBKeyplane*/ keyplane = [keyboardView valueForKey:@"keyplane"];
@@ -1062,23 +1079,26 @@ typedef CGPoint KIFDisplacement;
             NSString *actual = [[view performSelector:@selector(text)] stringByTrimmingCharactersInSet:[NSCharacterSet newlineCharacterSet]];
             
             UIAccessibilityElement *delElement = [self _accessibilityElementWithLabel:@"Delete" accessibilityValue:nil tappable:YES traits:traits error:error];
-            
-            if (!delElement) {
-                return KIFTestStepResultWait;
-            }
-            
-            UIView *delView = [UIAccessibilityElement viewContainingAccessibilityElement:delElement];
-            KIFTestWaitCondition(delView, error, @"Cannot find view with accessibility label \"Delete\"");
-            
-            CGRect delElementFrame = [delView.window convertRect:delElement.accessibilityFrame toView:delView];
-            CGPoint delTappablePointInElement = [delView tappablePointInRect:delElementFrame];
-            
-            // This is mostly redundant of the test in _accessibilityElementWithLabel:
-            KIFTestCondition(!isnan(delTappablePointInElement.x), error, @"The element with accessibility label Delete is not tappable");
-            
-            for(int i = 0; i < [actual length]; i++) {
-                [delView tapAtPoint:delTappablePointInElement];
-                CFRunLoopRunInMode(kCFRunLoopDefaultMode, keystrokeDelay, false);
+            //
+            //            if (!delElement) {
+            //                return KIFTestStepResultWait;
+            //            }
+            if (delElement) {
+                UIView *delView = [UIAccessibilityElement viewContainingAccessibilityElement:delElement];
+                KIFTestWaitCondition(delView, error, @"Cannot find view with accessibility label \"Delete\"");
+                
+                CGRect delElementFrame = [delView.window convertRect:delElement.accessibilityFrame toView:delView];
+                CGPoint delTappablePointInElement = [delView tappablePointInRect:delElementFrame];
+                
+                // This is mostly redundant of the test in _accessibilityElementWithLabel:
+                KIFTestCondition(!isnan(delTappablePointInElement.x), error, @"The element with accessibility label Delete is not tappable");
+                for(int i = 0; i < [actual length]; i++) {
+                    [delView tapAtPoint:delTappablePointInElement];
+                    CFRunLoopRunInMode(kCFRunLoopDefaultMode, keystrokeDelay, false);
+                }
+            } else {
+                KIFTestCondition([view isKindOfClass:[UITextField class]], error, @"Could not find a tappable delete button, and view is not a text field");
+                ((UITextField*) view).text = @"";
             }
         }
         
